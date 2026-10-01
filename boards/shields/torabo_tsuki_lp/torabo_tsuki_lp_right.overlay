@@ -15,6 +15,15 @@
                            <&zip_scroll_transform INPUT_TRANSFORM_Y_INVERT>,
                            <&zip_inertia>;
     };
+
+    // Hold mo3 + mo4 together (layer_precision) to slow the ball to 1/3
+    // speed for fine positioning, e.g. hitting a small button.
+    precision {
+        layers = <6>;
+        input-processors = <&zip_xy_transform (INPUT_TRANSFORM_X_INVERT | INPUT_TRANSFORM_Y_INVERT)>,
+                           <&zip_xy_scaler 1 3>,
+                           <&zip_inertia>;
+    };
 };
 
 // Tuning: tame scroll speed/coast and avoid move-inertia overshoot on
