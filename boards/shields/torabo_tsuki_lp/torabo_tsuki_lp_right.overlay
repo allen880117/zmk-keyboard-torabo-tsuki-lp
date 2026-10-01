@@ -2,9 +2,11 @@
 #include <input/processors.dtsi>
 #include <dt-bindings/zmk/input_transform.h>
 #include <zmk-input-inertia/input/processor/input_inertia.dtsi>
+#include <zmk-input-vector-acceleration/input_processor_vector_accel.dtsi>
 
 &pointing_listener {
     input-processors = <&zip_xy_transform (INPUT_TRANSFORM_X_INVERT | INPUT_TRANSFORM_Y_INVERT)>,
+                       <&vector_accel>,
                        <&zip_inertia>;
 
     scroller {
@@ -23,6 +25,17 @@
     move-threshold-start = <40>;
     move-decay-factor-int = <75>;
     scroll-decay-factor-int = <60>;
+};
+
+// Acceleration curve for normal cursor movement: slow, deliberate motion
+// is scaled down for precise small-target aiming, a fast flick is scaled
+// up so full-screen traversal still takes little physical movement.
+// Starting values -- retune on hardware (see commit message).
+&vector_accel {
+    min-factor = <400>;
+    max-factor = <2500>;
+    unity-speed = <800>;
+    max-speed = <5000>;
 };
 
 &size_s_transform {
