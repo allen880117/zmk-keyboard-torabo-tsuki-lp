@@ -12,10 +12,32 @@
     scroller {
         layers = <3>;
         input-processors = <&zip_xy_transform (INPUT_TRANSFORM_X_INVERT | INPUT_TRANSFORM_Y_INVERT)>,
+                           <&scroll_accel>,
                            <&zip_xy_to_scroll_mapper>,
                            <&zip_scroll_scaler 1 6>,
                            <&zip_scroll_transform INPUT_TRANSFORM_Y_INVERT>,
                            <&zip_inertia>;
+    };
+};
+
+// A second, independent curve instance (same compatible as &vector_accel)
+// dedicated to scrolling. max-factor is capped at 1000 (1.0x, no boost),
+// so the peak stays exactly what zip_scroll_scaler already produces --
+// only how EASILY that peak is reached changes: below unity-speed, slower
+// motion is damped down to min-factor; a decisively fast flick is needed
+// to reach unity-speed and get full, un-damped scroll output.
+// Starting values -- retune on hardware (see commit message).
+/ {
+    scroll_accel: scroll_accel {
+        compatible = "zmk,input-processor-vector-acceleration";
+        status = "okay";
+        #input-processor-cells = <0>;
+        track-remainders;
+
+        min-factor = <300>;
+        max-factor = <1000>;
+        unity-speed = <2500>;
+        max-speed = <4000>;
     };
 };
 
