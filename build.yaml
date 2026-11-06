@@ -31,5 +31,15 @@ include:
     shield: torabo_tsuki_lp_right
     snippet: "studio-rpc-usb-uart input-trackball input-split"
     artifact-name: torabo_tsuki_lp_double_ball_right_peripheral
+  # Cirque TM040040 trackpad in place of the trackball (I2C, via the adapter
+  # on the sensor port). Pair with the other half's plain _peripheral build.
+  - board: bmp_boost
+    shield: torabo_tsuki_lp_right
+    snippet: "studio-rpc-usb-uart split-central input-trackpad-cirque input-listener input-trackpad-cirque-listener"
+    artifact-name: torabo_tsuki_lp_cirque_right_central
+  - board: bmp_boost
+    shield: torabo_tsuki_lp_left
+    snippet: "studio-rpc-usb-uart split-central input-trackpad-cirque input-listener input-trackpad-cirque-listener"
+    artifact-name: torabo_tsuki_lp_cirque_left_central
   - board: bmp_boost
     shield: settings_reset

@@ -1,3 +1,5 @@
+add_subdirectory_ifdef(CONFIG_INPUT_PINNACLE drivers/cirque)
+
 if(CONFIG_SHIELD_TORABO_TSUKI_LP_LEFT OR CONFIG_SHIELD_TORABO_TSUKI_LP_RIGHT)
   zephyr_library()
   zephyr_include_directories(${APPLICATION_SOURCE_DIR}/include)

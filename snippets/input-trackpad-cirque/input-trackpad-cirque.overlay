@@ -1,0 +1,57 @@
+/*
+ * Cirque TM040040 (Pinnacle 1CA027) on the 6-pin sensor connector, in I2C
+ * mode, replacing the trackball. Use instead of input-trackball.
+ *
+ * Connector  MCU    Function     TM040040 pad (FFC pin)
+ *   1        GND    GND          GND  (11)
+ *   2        P0.18  SDA          SDA  (10)
+ *   3        P0.16  SCL          SCL  (9)
+ *   4        P0.19  (unused)     -
+ *   5        P0.20  DR (HW_DR)   DR   (4)
+ *   6        VCC    VDD 3.3V     VDD  (12)
+ *
+ * Remove the trackpad's R1 (470k) to put it in I2C mode, and fit 4.7k
+ * pull-ups on SDA/SCL (the adapter's R1/R2): the trackpad has none.
+ */
+
+#include <zephyr/dt-bindings/gpio/nordic-nrf-gpio.h>
+
+/* Sensor power enable. The trackball driver drives P0.08 through its
+ * power-gpios property; the Cirque driver has none, so hold it high from
+ * boot with a GPIO hog. */
+&gpio0 {
+    sensor_power_hog {
+        gpio-hog;
+        gpios = <8 (GPIO_ACTIVE_HIGH | NRF_GPIO_DRIVE_H0H1)>;
+        output-high;
+        line-name = "sensor-power";
+    };
+};
+
+&i2c0 {
+    status = "okay";
+    compatible = "nordic,nrf-twim";
+    pinctrl-0 = <&i2c0_default>;   /* SDA P0.18, SCL P0.16, from the shield */
+    pinctrl-1 = <&i2c0_sleep>;
+    pinctrl-names = "default", "sleep";
+    clock-frequency = <I2C_BITRATE_FAST>;
+
+    pointing_device: trackpad@2a {
+        status = "okay";
+        compatible = "cirque,pinnacle";
+        reg = <0x2a>;
+        dr-gpios = <&gpio0 20 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>;
+        sensitivity = "2x";
+
+        /* Relative mode (no absolute-mode): the pad reports finger motion
+         * like a mouse. Clicks and scrolling come from keys, so the pad's
+         * own tap-to-click is off; delete no-taps to get tap = left click. */
+        no-taps;
+
+        /* Orientation, same mounting as the KYENS build (it inverts both
+         * axes in absolute mode). If the cursor goes the wrong way, toggle
+         * these. */
+        x-invert;
+        /* y-invert; */
+    };
+};

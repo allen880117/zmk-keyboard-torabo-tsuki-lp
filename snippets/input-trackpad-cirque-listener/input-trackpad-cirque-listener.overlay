@@ -1,0 +1,45 @@
+/*
+ * Listener processors for the trackpad, on the half that has it. Use with
+ * input-trackpad-cirque and input-listener.
+ *
+ * Replaces the shield's trackball processors: orientation is set in the
+ * driver (x-invert / y-invert), and there is no cursor inertia, since
+ * lifting a finger off a pad should stop the cursor. The scroll layer is
+ * the same as the trackball's: hold layer 3 and slide to scroll.
+ */
+
+#include <dt-bindings/zmk/input_transform.h>
+
+&pointing_listener {
+    /* zip_xy_scaler is the overall speed: 3/2 = 1.5x. Raise it (2 1, 5 2)
+     * if the cursor is still slow, lower it (1 1) if it overshoots. */
+    input-processors = <&zip_xy_scaler 3 2>,
+                       <&tp_accel>;
+
+    scroller {
+        input-processors = <&scroll_accel>,
+                           <&zip_xy_to_scroll_mapper>,
+                           <&zip_scroll_scaler 1 6>,
+                           <&zip_scroll_transform INPUT_TRANSFORM_Y_INVERT>,
+                           <&zip_inertia>;
+    };
+};
+
+/ {
+    /* The trackpad's own acceleration curve, so the trackball's
+     * &vector_accel stays as it is. A pad has far less travel than a ball,
+     * so slow moves are never slowed down (min-factor 1.0x, where the
+     * trackball's 0.4x is what makes a pad feel sluggish), and the boost
+     * starts early so a short swipe crosses the screen. */
+    tp_accel: tp_accel {
+        compatible = "zmk,input-processor-vector-acceleration";
+        status = "okay";
+        #input-processor-cells = <0>;
+        track-remainders;
+
+        min-factor = <1000>;  /* 1.0x when moving slowly */
+        max-factor = <3500>;  /* 3.5x on a fast swipe */
+        unity-speed = <300>;  /* the boost starts above this speed */
+        max-speed = <3000>;   /* full boost from this speed */
+    };
+};
