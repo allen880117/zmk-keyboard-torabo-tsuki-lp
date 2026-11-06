@@ -43,15 +43,25 @@
         dr-gpios = <&gpio0 20 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>;
         sensitivity = "2x";
 
-        /* Relative mode (no absolute-mode): the pad reports finger motion
-         * like a mouse. Clicks and scrolling come from keys, so the pad's
-         * own tap-to-click is off; delete no-taps to get tap = left click. */
+        /* Absolute position in, mouse-style motion out. The pad's own
+         * relative mode is too coarse (laggy, jumpy), so the driver reads
+         * the finger position at full resolution and sends the smoothed
+         * change. See pinnacle_report_data_abs_rel in the driver. */
+        abs-rel-divisor = <1>;
+        /* ignore faint touches (hover, noise) that made the cursor float.
+         * Z is touch strength 0..63. */
+        absolute-mode-z-min = <3>;
+        /* travel (about 45 counts/mm) before a touch starts moving the
+         * cursor; raise if a resting finger still drifts */
+        abs-rel-start-threshold = <8>;
+
+        /* The pad's own tap-to-click only works in relative mode; clicks
+         * come from keys. */
         no-taps;
 
-        /* Orientation, same mounting as the KYENS build (it inverts both
-         * axes in absolute mode). If the cursor goes the wrong way, toggle
-         * these. */
+        /* Orientation, same as the KYENS build (it inverts both axes).
+         * If the cursor goes the wrong way, toggle these. */
         x-invert;
-        /* y-invert; */
+        y-invert;
     };
 };

@@ -11,10 +11,7 @@
 #include <dt-bindings/zmk/input_transform.h>
 
 &pointing_listener {
-    /* zip_xy_scaler is the overall speed: 3/2 = 1.5x. Raise it (2 1, 5 2)
-     * if the cursor is still slow, lower it (1 1) if it overshoots. */
-    input-processors = <&zip_xy_scaler 3 2>,
-                       <&tp_accel>;
+    input-processors = <&tp_accel>;
 
     scroller {
         input-processors = <&scroll_accel>,
@@ -27,19 +24,19 @@
 
 / {
     /* The trackpad's own acceleration curve, so the trackball's
-     * &vector_accel stays as it is. A pad has far less travel than a ball,
-     * so slow moves are never slowed down (min-factor 1.0x, where the
-     * trackball's 0.4x is what makes a pad feel sluggish), and the boost
-     * starts early so a short swipe crosses the screen. */
+     * &vector_accel stays as it is. Speeds are in pad counts per second
+     * (about 45 counts per mm; one full swipe across the pad is ~1800).
+     * This curve is the whole speed setting: about 1.8x KYENS's gain on
+     * slow moves, and about 2.4x on fast ones. */
     tp_accel: tp_accel {
         compatible = "zmk,input-processor-vector-acceleration";
         status = "okay";
         #input-processor-cells = <0>;
         track-remainders;
 
-        min-factor = <1000>;  /* 1.0x when moving slowly */
-        max-factor = <3500>;  /* 3.5x on a fast swipe */
-        unity-speed = <300>;  /* the boost starts above this speed */
-        max-speed = <3000>;   /* full boost from this speed */
+        min-factor = <400>;   /* 0.4x on slow, careful moves (~5 mm/s) */
+        unity-speed = <1500>; /* 1.0x at a normal move (~35 mm/s) */
+        max-factor = <2500>;  /* 2.5x on a fast swipe */
+        max-speed = <8000>;   /* full boost from ~180 mm/s */
     };
 };

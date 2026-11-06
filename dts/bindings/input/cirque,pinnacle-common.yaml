@@ -73,3 +73,10 @@ properties:
       Absolute mode: ignore touches with a Z (touch strength, 0..63) below
       this. Filters out a hovering finger and noise that otherwise move the
       cursor on their own.
+  abs-rel-start-threshold:
+    type: int
+    default: 8
+    description: |
+      abs-rel-divisor mode: the finger must move this many counts (about
+      45 per mm) from where it landed before the cursor follows. Stops a
+      resting finger from drifting the cursor.

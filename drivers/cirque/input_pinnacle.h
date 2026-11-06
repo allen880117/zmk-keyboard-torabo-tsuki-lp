@@ -87,6 +87,12 @@ struct pinnacle_data {
     bool suspended;
     uint8_t feed_cfg1;   /* expected FEED_CFG1, to detect a pad that reset itself */
     uint8_t health_tick, health_fail;
+
+    /* abs-rel: the current touch */
+    bool tracking, moving;
+    int16_t start_x, start_y; /* where the finger landed */
+    int32_t fx, fy;           /* smoothed position, in 1/16 counts */
+    int32_t out_x, out_y;     /* position already sent as motion */
 };
 
 enum pinnacle_sensitivity {
@@ -115,6 +121,7 @@ struct pinnacle_config {
     uint8_t x_axis_z_min, y_axis_z_min;
     uint16_t absolute_mode_scale_to_width, absolute_mode_scale_to_height, absolute_mode_clamp_min_x, absolute_mode_clamp_max_x, absolute_mode_clamp_min_y, absolute_mode_clamp_max_y;
     uint8_t absolute_mode_z_min; /* weaker touches are ignored (hover / noise) */
+    uint8_t abs_rel_start_threshold; /* abs-rel: travel before the cursor follows */
     const struct gpio_dt_spec dr;
 };
 

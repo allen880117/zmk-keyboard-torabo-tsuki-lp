@@ -1,9 +1,12 @@
 #define DT_DRV_COMPAT cirque_pinnacle
 
+#include <stdlib.h>
+
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 #include <zephyr/init.h>
 #include <zephyr/input/input.h>
 #include <zephyr/pm/device.h>
+#include <zephyr/sys/util.h>
 
 #include <zephyr/logging/log.h>
 
@@ -389,23 +392,95 @@ static void pinnacle_report_data_abs(const struct device *dev) {
     set_int(dev, true);
 }
 
+/*
+ * Absolute position in, relative motion out (abs-rel-divisor). Relative mode
+ * proper is too coarse: the pad only reports a count once the finger has
+ * moved far enough, so the cursor lags, then jumps. Here the pad runs in
+ * absolute mode (about 45 counts/mm) and motion is the change in a smoothed
+ * finger position:
+ * - touches weaker than absolute-mode-z-min are treated as no touch;
+ * - the first report of a touch only sets the start point, so putting a
+ *   finger down never jumps the cursor;
+ * - the cursor stays still until the finger has moved abs-rel-start-threshold
+ *   counts from where it landed, so a resting finger doesn't drift;
+ * - the position is smoothed more when moving slowly (sensor noise) and not
+ *   at all when moving fast (no lag on a swipe);
+ * - deltas are full-size int32, so fast swipes can't overflow and wrap.
+ */
+#define PINNACLE_POS_SHIFT 4 /* filtered position in 1/16 counts */
+
 static void pinnacle_report_data_abs_rel(const struct device *dev) {
     struct pinnacle_data *data = dev->data;
-    int16_t old_x = data->last_x;
-    int16_t old_y = data->last_y;
+    const struct pinnacle_config *config = dev->config;
 
     int ret = pinnacle_read_abs(dev);
-
-    if (ret == 0) {
-        int16_t dx = data->last_x - old_x;
-        int16_t dy = data->last_y - old_y;
-        const struct pinnacle_config *config = dev->config;
-
-        dx /= config->abs_rel_divisor;
-        dy /= config->abs_rel_divisor;
-
-        pinnacle_send_rel(dev, (int8_t) dx, (int8_t) dy);
+    pinnacle_clear_status(dev);
+    set_int(dev, true);
+    if (ret < 0) {
+        LOG_WRN("abs read failed (%d), re-armed", ret);
+        return;
     }
+
+    int32_t x = data->last_x, y = data->last_y;
+    bool touching = data->last_z > 0 && data->last_z >= config->absolute_mode_z_min &&
+                    x != 0 && y != 0;
+    if (!touching) {
+        data->tracking = false;
+        return;
+    }
+
+    x = CLAMP(x, config->absolute_mode_clamp_min_x, config->absolute_mode_clamp_max_x);
+    y = CLAMP(y, config->absolute_mode_clamp_min_y, config->absolute_mode_clamp_max_y);
+
+    if (!data->tracking) {
+        data->tracking = true;
+        data->moving = false;
+        data->start_x = x;
+        data->start_y = y;
+        data->fx = x << PINNACLE_POS_SHIFT;
+        data->fy = y << PINNACLE_POS_SHIFT;
+        return;
+    }
+
+    int32_t ex = (x << PINNACLE_POS_SHIFT) - data->fx;
+    int32_t ey = (y << PINNACLE_POS_SHIFT) - data->fy;
+    int32_t step = MAX(abs(ex), abs(ey)) >> PINNACLE_POS_SHIFT;
+    /* filter weight: 1/4 under 4 counts/report, 1/2 under 16, else none */
+    int shift = step < 4 ? 2 : (step < 16 ? 1 : 0);
+    data->fx += ex >> shift;
+    data->fy += ey >> shift;
+
+    int32_t px = (data->fx >> PINNACLE_POS_SHIFT) / config->abs_rel_divisor;
+    int32_t py = (data->fy >> PINNACLE_POS_SHIFT) / config->abs_rel_divisor;
+
+    if (!data->moving) {
+        if (MAX(abs(x - data->start_x), abs(y - data->start_y)) <
+            config->abs_rel_start_threshold) {
+            return;
+        }
+        data->moving = true;
+        data->out_x = px;
+        data->out_y = py;
+        return;
+    }
+
+    int32_t dx = px - data->out_x;
+    int32_t dy = py - data->out_y;
+    data->out_x = px;
+    data->out_y = py;
+    if (dx == 0 && dy == 0) {
+        return;
+    }
+    if (config->x_invert) {
+        dx = -dx;
+    }
+    if (config->y_invert) {
+        dy = -dy;
+    }
+
+    LOG_DBG("abs-rel: x=%d y=%d z=%d dx=%d dy=%d", x, y, data->last_z, dx, dy);
+    input_report_rel(dev, INPUT_REL_X, dx, false, K_FOREVER);
+    input_report_rel(dev, INPUT_REL_Y, dy, true, K_FOREVER);
 }
 
 /* FIX: same as pinnacle_report_data_abs: the interrupt was masked in
@@ -793,11 +868,12 @@ static int pinnacle_configure(const struct device *dev) {
     } else {
         LOG_ERR("Using relative mode");
     }
-    if (config->x_invert) {
+    /* abs-rel inverts its deltas itself, in pinnacle_report_data_abs_rel */
+    if (config->x_invert && !config->abs_rel_divisor) {
         feed_cfg1 |= PINNACLE_FEED_CFG1_INV_X;
     }
 
-    if (config->y_invert) {
+    if (config->y_invert && !config->abs_rel_divisor) {
         feed_cfg1 |= PINNACLE_FEED_CFG1_INV_Y;
     }
     if (feed_cfg1) {
@@ -887,6 +963,7 @@ static int pinnacle_pm_action(const struct device *dev, enum pm_device_action ac
         .absolute_mode_clamp_min_y = DT_INST_PROP(n, absolute_mode_clamp_min_y),                   \
         .absolute_mode_clamp_max_y = DT_INST_PROP(n, absolute_mode_clamp_max_y),                   \
         .absolute_mode_z_min = DT_INST_PROP(n, absolute_mode_z_min),                               \
+        .abs_rel_start_threshold = DT_INST_PROP(n, abs_rel_start_threshold),                       \
         .x_axis_z_min = DT_INST_PROP_OR(n, x_axis_z_min, 5),                                       \
         .y_axis_z_min = DT_INST_PROP_OR(n, y_axis_z_min, 4),                                       \
         .sensitivity = DT_INST_ENUM_IDX_OR(n, sensitivity, PINNACLE_SENSITIVITY_1X),               \
