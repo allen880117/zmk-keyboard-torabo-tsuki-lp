@@ -589,11 +589,24 @@ static void pinnacle_watchdog_cb(struct k_work *work) {
         bool bad = (ret < 0) || (feed1 & mask) != (data->feed_cfg1 & mask);
         data->health_fail = bad ? data->health_fail + 1 : 0;
         if ((ret >= 0 && bad) || data->health_fail >= 2) {
-            LOG_WRN("pad lost its configuration (read %d, FEED_CFG1 0x%02x, want 0x%02x), "
-                    "reconfiguring",
-                    ret, feed1, data->feed_cfg1);
+            /* Tell a real reset from one corrupted write: a reset also puts
+             * Z_IDLE back to its default (30), a stray write to FEED_CFG1
+             * leaves our value. A stray write only needs FEED_CFG1 back;
+             * a full reconfigure recalibrates, and with a finger on the pad
+             * that spoils tracking until the next recalibration. */
+            uint8_t z_idle = 0;
+            int zret = pinnacle_seq_read(dev, PINNACLE_Z_IDLE, &z_idle, 1);
+            bool reset = zret < 0 || z_idle != NUM_ZIDLE + NUM_ZIDLE_PAD;
+            LOG_WRN("pad lost its configuration (read %d, FEED_CFG1 0x%02x, want 0x%02x, "
+                    "Z_IDLE %d): %s",
+                    ret, feed1, data->feed_cfg1, z_idle,
+                    reset ? "pad reset, reconfiguring" : "stray write, restoring FEED_CFG1");
             set_int(dev, false);
-            if (pinnacle_configure(dev) >= 0) {
+            if (reset) {
+                if (pinnacle_configure(dev) >= 0) {
+                    data->health_fail = 0;
+                }
+            } else if (pinnacle_write(dev, PINNACLE_FEED_CFG1, data->feed_cfg1) >= 0) {
                 data->health_fail = 0;
             }
             pinnacle_clear_status(dev);
