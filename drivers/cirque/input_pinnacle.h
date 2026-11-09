@@ -87,6 +87,9 @@ struct pinnacle_data {
     bool suspended;
     uint8_t feed_cfg1;   /* expected FEED_CFG1, to detect a pad that reset itself */
     uint8_t health_tick, health_fail;
+    bool configured;          /* the pad has answered and been set up */
+    uint8_t heartbeat_tick;
+    uint32_t reads;           /* position reports read, for the debug status line */
 
     /* abs-rel: the current touch */
     bool tracking, moving;

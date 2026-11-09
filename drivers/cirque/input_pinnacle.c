@@ -360,6 +360,7 @@ static int pinnacle_read_abs(const struct device *dev) {
         return ret;
     }
     struct pinnacle_data *data = dev->data;
+    data->reads++;
     // TODO: Enable SW3-SW5 as well
     data->last_btn = packet[0] &
                   (PINNACLE_PACKET0_BTN_PRIM | PINNACLE_PACKET0_BTN_SEC | PINNACLE_PACKET0_BTN_AUX);
@@ -571,6 +572,24 @@ static void pinnacle_watchdog_cb(struct k_work *work) {
         return;
     }
 
+    /* 0. the pad didn't answer at boot (or a reconfigure failed): retry */
+    if (!data->configured) {
+        if (++data->health_tick >= PINNACLE_HEALTH_EVERY) {
+            data->health_tick = 0;
+            set_int(dev, false);
+            int ret = pinnacle_configure(dev);
+            if (ret >= 0) {
+                data->configured = true;
+                LOG_INF("pad answered, configured");
+            } else {
+                LOG_WRN("pad still not answering (%d), retrying", ret);
+            }
+            pinnacle_clear_status(dev);
+            set_int(dev, true);
+        }
+        goto heartbeat;
+    }
+
     /* 1. DR held active with nothing queued to service it */
     if (gpio_pin_get_dt(&config->dr) > 0 && !k_work_is_pending(&data->work)) {
         LOG_WRN("DR stuck active, recovering");
@@ -609,9 +628,24 @@ static void pinnacle_watchdog_cb(struct k_work *work) {
             } else if (pinnacle_write(dev, PINNACLE_FEED_CFG1, data->feed_cfg1) >= 0) {
                 data->health_fail = 0;
             }
+            if (data->health_fail >= 4) {
+                data->configured = false; /* stop rechecking, retry setup */
+            }
             pinnacle_clear_status(dev);
             set_int(dev, true);
         }
+    }
+heartbeat:
+    /* debug builds: one status line every 5 s, to debug wiring without
+     * needing the boot log (which is gone before USB serial connects) */
+    if (IS_ENABLED(CONFIG_INPUT_LOG_LEVEL_DBG) && ++data->heartbeat_tick >= 10) {
+        data->heartbeat_tick = 0;
+        uint8_t id[2] = {0, 0};
+        int ret = pinnacle_seq_read(dev, PINNACLE_FW_ID, id, 2);
+        LOG_DBG("status: configured=%d, chip id read %d -> 0x%02x 0x%02x (expect 0x07), "
+                "DR pin=%d, readings=%u",
+                data->configured, ret, id[0], id[1], gpio_pin_get_dt(&config->dr),
+                data->reads);
     }
     k_work_schedule(&data->watchdog, K_MSEC(PINNACLE_WATCHDOG_MS));
 }
@@ -711,9 +745,14 @@ static int pinnacle_force_recalibrate(const struct device *dev) {
         LOG_ERR("Failed to force calibration %d", ret);
     }
 
-    do {
-        pinnacle_seq_read(dev, PINNACLE_CAL_CFG, &val, 1);
-    } while (val & 0x01);
+    /* calibration takes ~100 ms; give up after ~1 s or on a failed read,
+     * which used to spin here forever if the pad stopped answering */
+    for (int i = 0; i < 100; i++) {
+        if (pinnacle_seq_read(dev, PINNACLE_CAL_CFG, &val, 1) < 0 || !(val & 0x01)) {
+            break;
+        }
+        k_msleep(10);
+    }
 
     return ret;
 }
@@ -903,14 +942,9 @@ static int pinnacle_configure(const struct device *dev) {
 static int pinnacle_init(const struct device *dev) {
     struct pinnacle_data *data = dev->data;
     const struct pinnacle_config *config = dev->config;
-    int ret = pinnacle_configure(dev);
-    if (ret < 0) {
-        return ret;
-    }
+    int ret;
 
     data->dev = dev;
-
-    pinnacle_clear_status(dev);
 
     gpio_pin_configure_dt(&config->dr, GPIO_INPUT);
     gpio_init_callback(&data->gpio_cb, pinnacle_gpio_cb, BIT(config->dr.pin));
@@ -923,7 +957,17 @@ static int pinnacle_init(const struct device *dev) {
     k_work_init(&data->work, pinnacle_work_cb);
     k_work_init_delayable(&data->watchdog, pinnacle_watchdog_cb);
 
-    pinnacle_write(dev, PINNACLE_FEED_CFG1, data->feed_cfg1);
+    /* A pad that doesn't answer yet (powering up late, loose wire) is
+     * retried by the watchdog instead of disabling the driver until the
+     * next reboot. */
+    ret = pinnacle_configure(dev);
+    data->configured = ret >= 0;
+    if (data->configured) {
+        pinnacle_write(dev, PINNACLE_FEED_CFG1, data->feed_cfg1);
+    } else {
+        LOG_ERR("pad not answering at boot (%d), retrying every 2 s", ret);
+    }
+    pinnacle_clear_status(dev);
 
     set_int(dev, true);
     k_work_schedule(&data->watchdog, K_MSEC(PINNACLE_WATCHDOG_MS));
