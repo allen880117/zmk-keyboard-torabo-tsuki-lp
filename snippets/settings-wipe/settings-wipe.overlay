@@ -1,0 +1,17 @@
+/*
+ * Settings wipe firmware: replace the keymap with an empty one so no key
+ * types anything while the wipe keys are held.
+ */
+
+/ {
+    /delete-node/ keymap;
+    /delete-node/ conditional_layers;
+
+    keymap {
+        compatible = "zmk,keymap";
+
+        wipe_layer {
+            bindings = <&none>;
+        };
+    };
+};

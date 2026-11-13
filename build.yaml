@@ -33,3 +33,11 @@ include:
     artifact-name: torabo_tsuki_lp_double_ball_right_peripheral
   - board: bmp_boost
     shield: settings_reset
+  - board: bmp_boost
+    shield: torabo_tsuki_lp_left
+    snippet: "zmk-usb-logging split-central settings-wipe"
+    artifact-name: torabo_tsuki_lp_left_wipe
+  - board: bmp_boost
+    shield: torabo_tsuki_lp_right
+    snippet: "zmk-usb-logging split-central settings-wipe"
+    artifact-name: torabo_tsuki_lp_right_wipe

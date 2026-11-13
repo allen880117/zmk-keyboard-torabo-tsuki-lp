@@ -1,0 +1,4 @@
+name: settings-wipe
+append:
+  EXTRA_DTC_OVERLAY_FILE: settings-wipe.overlay
+  EXTRA_CONF_FILE: settings-wipe.conf

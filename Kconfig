@@ -1,0 +1,6 @@
+config TORABO_SETTINGS_WIPE
+    bool "Settings wipe firmware"
+    help
+      Hold the two outermost keys of a half's top row for 5 s to erase its
+      settings (pairings, split partner, Studio edits). Enabled by the
+      settings-wipe snippet; see src/settings_wipe.c.
