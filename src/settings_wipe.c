@@ -94,16 +94,19 @@ static void report_work_handler(struct k_work *work) {
 }
 
 static void wipe_work_handler(struct k_work *work) {
-    // Stop Bluetooth first, so a reconnecting host or half can't write a
-    // new pairing back after the erase.
-    int rc = bt_disable();
-    if (rc) {
-        LOG_WRN("Bluetooth did not stop (%d), erasing anyway", rc);
-    }
-
+    // Erase while Bluetooth still runs: on nRF52 flash operations are
+    // scheduled around the radio, and with Bluetooth stopped they time out
+    // (-ETIMEDOUT).
     erase_rc = zmk_settings_erase();
     wiped = true;
     LOG_INF("WIPE: erase returned %d", erase_rc);
+
+    // Then stop it, so a reconnecting host or half can't write a new pairing
+    // back.
+    int rc = bt_disable();
+    if (rc) {
+        LOG_WRN("WIPE: Bluetooth did not stop (%d)", rc);
+    }
     k_work_reschedule(&report_work, K_NO_WAIT);
 }
 
