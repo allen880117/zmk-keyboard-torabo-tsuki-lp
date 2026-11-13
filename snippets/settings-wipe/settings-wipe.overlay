@@ -1,6 +1,8 @@
 /*
- * Settings wipe firmware: replace the keymap with an empty one so no key
- * types anything while the wipe keys are held.
+ * Settings wipe firmware: replace the keymap with one that does nothing, so
+ * no key types anything while the wipe keys are held. Every position needs
+ * a binding (66, the size_l layout): a missing one stops the key event
+ * before it reaches the wipe code.
  */
 
 / {
@@ -11,7 +13,14 @@
         compatible = "zmk,keymap";
 
         wipe_layer {
-            bindings = <&none>;
+            bindings = <
+                &none &none &none &none &none &none &none &none &none &none &none
+                &none &none &none &none &none &none &none &none &none &none &none
+                &none &none &none &none &none &none &none &none &none &none &none
+                &none &none &none &none &none &none &none &none &none &none &none
+                &none &none &none &none &none &none &none &none &none &none &none
+                &none &none &none &none &none &none &none &none &none &none &none
+            >;
         };
     };
 };
